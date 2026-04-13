@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Absensi Perpustakaan SMPN 4 MONTA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;600;700&display=swap');
+        
+        :root {
+            --gold-primary: #D4AF37;
+            --gold-light: #F9E498;
+            --gold-dark: #996515;
+            --vip-black: #1a1a1a;
+        }
+
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: radial-gradient(circle at top, #2c2c2c 0%, #121212 100%);
+            color: #e0e0e0;
+        }
+
+        .gold-text {
+            background: linear-gradient(to right, var(--gold-light), var(--gold-primary), var(--gold-dark));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-family: 'Playfair Display', serif;
+        }
+
+        .vip-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .btn-gold {
+            background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold-primary) 50%, var(--gold-light) 100%);
+            color: #1a1a1a;
+            font-weight: 700;
+            transition: all 0.3s ease;
+        }
+
+        .btn-gold:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(212, 175, 55, 0.4);
+        }
+
+        .nav-tab.active {
+            border-bottom: 2px solid var(--gold-primary);
+            color: var(--gold-primary);
+        }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #1a1a1a; }
+        ::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen pb-20">
+
+    <div class="max-w-4xl mx-auto px-4 pt-10">
+        <!-- Header Luxury -->
+        <div class="text-center mb-12">
+            <div class="inline-block p-1 border-b-2 border-gold-primary mb-4">
+                <span class="uppercase tracking-[0.3em] text-[10px] text-gray-400">Official Membership Portal</span>
+            </div>
+            <h1 class="text-4xl md:text-5xl font-bold gold-text mb-2">SMPN 4 MONTA</h1>
+            <p class="text-gray-400 tracking-widest uppercase text-sm font-light">Library Attendance System 2025/2026</p>
+        </div>
+
+        <!-- Navigation Menu -->
+        <div class="flex justify-center gap-8 mb-8 border-b border-white/10 text-sm font-semibold tracking-wider">
+            <button onclick="switchTab('absensi')" id="tab-absensi" class="nav-tab active pb-4 transition-all">ABSENSI</button>
+            <button onclick="switchTab('riwayat')" id="tab-riwayat" class="nav-tab pb-4 transition-all text-gray-500">RIWAYAT</button>
+            <button onclick="switchTab('kelola')" id="tab-kelola" class="nav-tab pb-4 transition-all text-gray-500">KELOLA ANGGOTA</button>
+        </div>
+
+        <!-- Section: Absensi -->
+        <div id="section-absensi" class="tab-content">
+            <div class="vip-card rounded-3xl p-6 mb-8 text-center md:text-left">
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div>
+                        <p id="dateDisplay" class="text-gold-light font-medium"></p>
+                        <h2 class="text-xl font-bold">Jadwal Piket Hari Ini</h2>
+                    </div>
+                    <select id="daySelect" onchange="renderAttendance()" class="bg-black/50 border border-gold-primary/30 text-gold-light p-2 rounded-lg outline-none focus:border-gold-primary transition-all">
+                        <option value="Senin">Senin</option>
+                        <option value="Selasa">Selasa</option>
+                        <option value="Rabu">Rabu</option>
+                        <option value="Kamis">Kamis</option>
+                        <option value="Jum'at">Jum'at</option>
+                        <option value="Sabtu">Sabtu</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="attendanceCards" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+
+            <div class="mt-10">
+                <button onclick="submitAttendance()" class="btn-gold w-full py-4 rounded-2xl text-lg uppercase tracking-widest shadow-xl">
+                    Simpan & Log Kehadiran
+                </button>
+            </div>
+        </div>
+
+        <!-- Section: Riwayat -->
+        <div id="section-riwayat" class="tab-content hidden">
+            <div class="vip-card rounded-3xl p-6 overflow-hidden">
+                <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <h2 class="text-xl font-bold gold-text">Log Kehadiran Member</h2>
+                    <div class="flex gap-2">
+                        <button onclick="confirmClearHistory()" class="text-[10px] border border-red-500 text-red-500 px-4 py-2 rounded-full hover:bg-red-500 hover:text-white transition-all uppercase font-bold">
+                            Hapus Riwayat
+                        </button>
+                        <button onclick="downloadPDF()" class="text-[10px] border border-gold-primary text-gold-primary px-4 py-2 rounded-full hover:bg-gold-primary hover:text-black transition-all uppercase font-bold">
+                            Download PDF Log
+                        </button>
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead>
+                            <tr class="border-b border-white/10 text-gray-400">
+                                <th class="pb-4">Tanggal</th>
+                                <th class="pb-4">Hari</th>
+                                <th class="pb-4">Nama</th>
+                                <th class="pb-4">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Kelola -->
+        <div id="section-kelola" class="tab-content hidden">
+            <div class="vip-card rounded-3xl p-6 mb-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                    <h2 class="text-xl font-bold gold-text">Kelola Data Master</h2>
+                    <button onclick="downloadMasterDataPDF()" class="btn-gold text-[10px] px-4 py-2 rounded-lg shadow-lg">
+                        DOWNLOAD REKAPAN NAMA PIKET
+                    </button>
+                </div>
+                <div class="flex flex-col md:flex-row gap-3 border-t border-white/5 pt-6">
+                    <input type="text" id="newName" placeholder="Nama Lengkap & Gelar..." class="flex-1 bg-black/40 border border-white/10 p-3 rounded-xl outline-none focus:border-gold-primary transition-all">
+                    <select id="newDay" class="bg-black/40 border border-white/10 p-3 rounded-xl outline-none focus:border-gold-primary transition-all text-gray-300">
+                        <option value="Senin">Senin</option>
+                        <option value="Selasa">Selasa</option>
+                        <option value="Rabu">Rabu</option>
+                        <option value="Kamis">Kamis</option>
+                        <option value="Jum'at">Jum'at</option>
+                        <option value="Sabtu">Sabtu</option>
+                    </select>
+                    <button onclick="addMember()" class="btn-gold px-8 py-3 rounded-xl">TAMBAH</button>
+                </div>
+            </div>
+
+            <div id="manageList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+    </div>
+
+    <!-- Alert Custom -->
+    <div id="customAlert" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 hidden p-4">
+        <div class="vip-card p-8 rounded-3xl max-w-sm w-full text-center border-gold-primary border">
+            <div id="alertIcon" class="mb-4 text-gold-primary text-4xl">👑</div>
+            <p id="alertMessage" class="text-white mb-6 font-medium"></p>
+            <div id="alertActions" class="flex flex-col gap-2">
+                <button onclick="closeAlert()" class="btn-gold w-full py-3 rounded-xl">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let dataJadwal = JSON.parse(localStorage.getItem('jadwalPerpus')) || {
+            "Senin": ["AL AINA UL HADIAH, S.Pd", "MUSLIMAH, S.Pd", "NURLAELAH, S.Pd", "NURUL ARIFAH, S.Pd", "ST. ASFA, S.Pd"],
+            "Selasa": ["MUKMINAH, S.Pd", "NURHASANAH, S.Pd", "NURRAHMI, S.Pd", "SA'ADIAH, S.Pd", "JUNARI, S.Pd"],
+            "Rabu": ["AL AINA UL HADIAH, S.Pd", "MUSLIMAH, S.Pd", "NURLAELAH, S.Pd", "NURUL ARIFAH, S.Pd", "SARINA, S.Pd"],
+            "Kamis": ["MUKMINAH, S.Pd", "NURHASANAH, S.Pd", "NURRAHMI, S.Pd", "SA'ADIAH, S.Pd", "YULIANA ANDINI, SE"],
+            "Jum'at": ["AL AINA UL HADIAH, S.Pd", "MUSLIMAH, S.Pd", "NURLAELAH, S.Pd", "NURUL ARIFAH, S.Pd"],
+            "Sabtu": ["MUKMINAH, S.Pd", "NURHASANAH, S.Pd", "NURRAHMI, S.Pd", "SA'ADIAH, S.Pd", "NURKHALIFAH, S.IP"]
+        };
+
+        let riwayat = JSON.parse(localStorage.getItem('riwayatPerpus')) || [];
+        const daysID = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jum'at", "Sabtu"];
+
+        function init() {
+            const today = new Date();
+            const dayName = daysID[today.getDay()];
+            document.getElementById('daySelect').value = dayName !== "Minggu" ? dayName : "Senin";
+            updateDate();
+            renderAttendance();
+            renderHistory();
+            renderManageList();
+        }
+
+        function updateDate() {
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('dateDisplay').innerText = new Date().toLocaleDateString('id-ID', options);
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active', 'text-gold-primary'));
+            document.getElementById(`section-${tab}`).classList.remove('hidden');
+            document.getElementById(`tab-${tab}`).classList.add('active', 'text-gold-primary');
+        }
+
+        function renderAttendance() {
+            const selectedDay = document.getElementById('daySelect').value;
+            const names = dataJadwal[selectedDay];
+            const container = document.getElementById('attendanceCards');
+            container.innerHTML = '';
+            names.forEach((name, index) => {
+                const card = document.createElement('div');
+                card.className = "vip-card p-5 rounded-2xl flex flex-col gap-4";
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-gold-dark to-gold-light flex items-center justify-center text-black font-bold text-xs">${index + 1}</div>
+                        <h3 class="font-semibold text-white tracking-wide">${name}</h3>
+                    </div>
+                    <div class="flex gap-2">
+                        ${['Hadir', 'Izin', 'Alpa'].map(status => `
+                            <label class="flex-1 cursor-pointer">
+                                <input type="radio" name="piket-${index}" value="${status}" class="hidden peer">
+                                <div class="text-[10px] text-center py-2 rounded-lg border border-white/5 bg-white/5 peer-checked:bg-gold-primary peer-checked:text-black peer-checked:border-gold-primary transition-all uppercase font-bold tracking-widest text-gray-400">${status}</div>
+                            </label>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function submitAttendance() {
+            const selectedDay = document.getElementById('daySelect').value;
+            const names = dataJadwal[selectedDay];
+            const date = new Date().toLocaleDateString('id-ID');
+            let completed = true;
+            const sessionRecords = [];
+            names.forEach((name, index) => {
+                const checked = document.querySelector(`input[name="piket-${index}"]:checked`);
+                if (!checked) completed = false;
+                else sessionRecords.push({ tanggal: date, hari: selectedDay, nama: name, status: checked.value });
+            });
+            if (!completed) return showAlert("👑 Selesaikan semua absen untuk status VIP.");
+            riwayat = [...sessionRecords, ...riwayat];
+            localStorage.setItem('riwayatPerpus', JSON.stringify(riwayat));
+            renderHistory();
+            showAlert("👑 Absensi Berhasil Disimpan.");
+        }
+
+        function renderHistory() {
+            const tbody = document.getElementById('historyTableBody');
+            tbody.innerHTML = '';
+            riwayat.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = "border-b border-white/5 text-xs";
+                const color = item.status === 'Hadir' ? 'text-green-400' : (item.status === 'Izin' ? 'text-yellow-400' : 'text-red-400');
+                row.innerHTML = `<td class="py-3 text-gray-500">${item.tanggal}</td><td class="py-3">${item.hari}</td><td class="py-3 text-white">${item.nama}</td><td class="py-3 font-bold ${color}">${item.status.toUpperCase()}</td>`;
+                tbody.appendChild(row);
+            });
+        }
+
+        function confirmClearHistory() {
+            if (riwayat.length === 0) return showAlert("⚠️ Tidak ada riwayat untuk dihapus.");
+            
+            const msg = "Apakah Anda yakin ingin menghapus SEMUA riwayat absensi? Tindakan ini tidak dapat dibatalkan.";
+            document.getElementById('alertMessage').innerText = msg;
+            document.getElementById('alertActions').innerHTML = `
+                <button onclick="clearHistory()" class="bg-red-500 text-white w-full py-3 rounded-xl font-bold mb-2">YA, HAPUS SEMUA</button>
+                <button onclick="closeAlert()" class="bg-white/10 text-white w-full py-3 rounded-xl">BATAL</button>
+            `;
+            document.getElementById('customAlert').classList.remove('hidden');
+        }
+
+        function clearHistory() {
+            riwayat = [];
+            localStorage.setItem('riwayatPerpus', JSON.stringify(riwayat));
+            renderHistory();
+            closeAlert();
+            showAlert("✅ Riwayat telah dibersihkan.");
+            // Reset actions to default
+            setTimeout(() => {
+                document.getElementById('alertActions').innerHTML = `<button onclick="closeAlert()" class="btn-gold w-full py-3 rounded-xl">OK</button>`;
+            }, 300);
+        }
+
+        async function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("Laporan Kehadiran VIP", 14, 20);
+            doc.autoTable({ head: [['Tanggal', 'Hari', 'Nama', 'Status']], body: riwayat.map(i => [i.tanggal, i.hari, i.nama, i.status]), startY: 25 });
+            doc.save(`Laporan_Absensi.pdf`);
+        }
+
+        async function downloadMasterDataPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFillColor(26, 26, 26);
+            doc.rect(0, 0, 210, 40, 'F');
+            doc.setTextColor(212, 175, 55);
+            doc.setFontSize(18);
+            doc.text("JADWAL PIKET PERPUSTAKAAN", 105, 18, { align: "center" });
+            doc.setFontSize(12);
+            doc.text("SMPN 4 MONTA - TAHUN AJARAN 2025/2026", 105, 28, { align: "center" });
+
+            let tableData = [];
+            const maxRows = Math.max(...Object.values(dataJadwal).map(arr => arr.length));
+            for (let i = 0; i < maxRows; i++) {
+                tableData.push([
+                    dataJadwal["Senin"][i] || "-",
+                    dataJadwal["Selasa"][i] || "-",
+                    dataJadwal["Rabu"][i] || "-",
+                    dataJadwal["Kamis"][i] || "-",
+                    dataJadwal["Jum'at"][i] || "-",
+                    dataJadwal["Sabtu"][i] || "-"
+                ]);
+            }
+
+            doc.autoTable({
+                head: [['SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUM\'AT', 'SABTU']],
+                body: tableData,
+                startY: 50,
+                theme: 'grid',
+                headStyles: { fillColor: [212, 175, 55], textColor: [0, 0, 0], fontSize: 9, halign: 'center', fontStyle: 'bold' },
+                styles: { fontSize: 8, cellPadding: 3, textColor: [40, 40, 40] }
+            });
+            doc.save("Rekapan_Nama_Piket_Perpus.pdf");
+        }
+
+        function renderManageList() {
+            const container = document.getElementById('manageList');
+            container.innerHTML = '';
+            Object.keys(dataJadwal).forEach(day => {
+                const div = document.createElement('div');
+                div.className = "vip-card p-4 rounded-2xl";
+                div.innerHTML = `
+                    <h3 class="gold-text font-bold mb-3 border-b border-white/5 pb-2 uppercase text-xs tracking-widest">${day}</h3>
+                    <div class="space-y-1">
+                        ${dataJadwal[day].map((name, i) => `
+                            <div class="flex justify-between items-center text-[11px] bg-white/5 p-2 rounded-lg">
+                                <span class="truncate pr-2">${name}</span>
+                                <button onclick="removeMember('${day}', ${i})" class="text-red-500 font-bold">✕</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function addMember() {
+            const name = document.getElementById('newName').value;
+            const day = document.getElementById('newDay').value;
+            if (!name) return;
+            dataJadwal[day].push(name);
+            localStorage.setItem('jadwalPerpus', JSON.stringify(dataJadwal));
+            document.getElementById('newName').value = '';
+            renderManageList();
+            renderAttendance();
+            showAlert(`👑 ${name} ditambahkan ke hari ${day}`);
+        }
+
+        function removeMember(day, i) {
+            if(confirm('Hapus anggota ini?')) {
+                dataJadwal[day].splice(i, 1);
+                localStorage.setItem('jadwalPerpus', JSON.stringify(dataJadwal));
+                renderManageList();
+                renderAttendance();
+            }
+        }
+
+        function showAlert(msg) {
+            document.getElementById('alertMessage').innerText = msg;
+            document.getElementById('alertActions').innerHTML = `<button onclick="closeAlert()" class="btn-gold w-full py-3 rounded-xl">OK</button>`;
+            document.getElementById('customAlert').classList.remove('hidden');
+        }
+
+        function closeAlert() { document.getElementById('customAlert').classList.add('hidden'); }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
