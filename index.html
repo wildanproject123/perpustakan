@@ -96,7 +96,7 @@
         }
     </style>
 </head>
-<body class="flex min-h-screen">
+<body class="flex min-h-screen" onload="init()">
 
     <!-- Mobile Menu Toggle -->
     <button onclick="toggleSidebar()" class="lg:hidden fixed bottom-6 right-6 z-[60] gold-gradient w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-black">
@@ -108,7 +108,6 @@
         <div class="p-8 text-center">
             <h1 class="text-2xl font-black gold-text tracking-tighter flex items-center justify-center gap-2">
                 <i class="fas fa-crown"></i> LIBRARY
-
             </h1>
             <p class="text-[9px] text-gray-500 uppercase tracking-[0.3em] mt-1">SMP NEGERI 4 MONTA</p>
         </div>
@@ -435,6 +434,27 @@
     </div>
 
     <script>
+        // --- GOOGLE SHEET INTEGRATION CONFIG ---
+        const scriptURL = "https://script.google.com/macros/s/AKfycbwD11Hnx75I2PpE0tFixyIEwghMHNZlvy2uMcKuTN15mFvOQpxI4SdeL9Zm7_OiqMZLwQ/exec"; 
+
+        async function sendToGoogleSheet(sheetName, data) {
+            if (!scriptURL) return;
+            try {
+                // Menggunakan fetch POST dengan mode no-cors untuk menghindari error CORS browser
+                // Parameter sheet dikirim lewat URL query, data dikirim lewat body
+                await fetch(`${scriptURL}?sheet=${sheetName}`, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                console.log(`Data sent to ${sheetName} successfully`);
+            } catch (error) {
+                console.error('Error sending to Sheet:', error);
+            }
+        }
+
         // --- DATA INITIALIZATION ---
         let dataJadwal = JSON.parse(localStorage.getItem('jadwalPerpus')) || {
             "Senin": ["AL AINA UL HADIAH, S.Pd", "MUSLIMAH, S.Pd", "NURLAELAH, S.Pd", "NURUL ARIFAH, S.Pd", "ST. ASFA, S.Pd"],
@@ -520,7 +540,9 @@
             const today = new Date().toLocaleDateString('id-ID');
             let entries = 0;
             for(let name in tempPresence) {
-                piketLog.unshift({ id: Date.now() + Math.random(), tgl: today, hari: day, nama: name, status: tempPresence[name] });
+                const entry = { id: Date.now() + Math.random(), tgl: today, hari: day, nama: name, status: tempPresence[name] };
+                piketLog.unshift(entry);
+                sendToGoogleSheet('Presensi_Petugas', entry);
                 entries++;
                 delete tempPresence[name];
             }
@@ -549,7 +571,9 @@
             const k = document.getElementById('siswaKelas').value;
             const t = document.getElementById('siswaTujuan').value;
             if(!n || !k) return showAlert("⚠️ Nama & Kelas wajib diisi.");
-            riwayatSiswa.unshift({ id: Date.now(), n, k, t, w: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) });
+            const entry = { id: Date.now(), n, k, t, w: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }), d: new Date().toLocaleDateString('id-ID') };
+            riwayatSiswa.unshift(entry);
+            sendToGoogleSheet('Kunjungan_Siswa', entry);
             localStorage.setItem('riwayatSiswa', JSON.stringify(riwayatSiswa));
             document.getElementById('siswaNama').value = '';
             document.getElementById('siswaKelas').value = '';
@@ -562,198 +586,152 @@
                     <td class="py-4 text-[10px] text-gray-500">${s.w}</td>
                     <td class="py-4 text-xs font-bold text-white">${s.n}</td>
                     <td class="py-4 text-xs text-gold-light">${s.k}</td>
-                    <td class="py-4 text-[9px]"><span class="bg-white/5 px-2 py-1 rounded uppercase font-bold text-gray-400">${s.t}</span></td>
+                    <td class="py-4">
+                         <button onclick="deleteSiswaRow(${s.id})" class="text-red-400 hover:text-red-600"><i class="fas fa-trash-alt"></i></button>
+                    </td>
                 </tr>
             `).join('');
         }
 
-        // --- CATALOG ---
+        function deleteSiswaRow(id) {
+            confirmDelete("Hapus riwayat kunjungan ini?", () => {
+                riwayatSiswa = riwayatSiswa.filter(s => s.id !== id);
+                localStorage.setItem('riwayatSiswa', JSON.stringify(riwayatSiswa));
+                renderSiswaHistory(); refreshStats();
+            });
+        }
+
+        // --- BOOKS ---
+        function addBook() {
+            const title = document.getElementById('bookTitle').value;
+            const author = document.getElementById('bookAuthor').value;
+            const category = document.getElementById('bookCategory').value;
+            const stock = document.getElementById('bookStock').value;
+            const editId = document.getElementById('editBookId').value;
+
+            if(!title || !stock) return showAlert("⚠️ Judul & Stok wajib!");
+
+            if(editId) {
+                const idx = daftarBuku.findIndex(b => b.id == editId);
+                const old = daftarBuku[idx];
+                daftarBuku[idx] = { ...old, judul: title, penulis: author, kategori: category, stokAwal: stock, stokTersedia: stock - (old.stokAwal - old.stokTersedia) };
+                cancelEditBook();
+            } else {
+                const newBook = { id: Date.now(), judul: title, penulis: author, kategori: category, stokAwal: stock, stokTersedia: stock };
+                daftarBuku.push(newBook);
+                sendToGoogleSheet('Data_Buku', newBook);
+            }
+
+            localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
+            renderBuku(); populatePinjamSelect(); refreshStats();
+            document.querySelectorAll('#section-kelola input').forEach(i => i.value = '');
+            showAlert("📚 Data Koleksi Diperbarui!");
+        }
+
         function renderBuku() {
-            const q = document.getElementById('searchBuku').value.toLowerCase();
-            document.getElementById('bukuGrid').innerHTML = daftarBuku.filter(b => b.judul.toLowerCase().includes(q)).map(b => `
-                <div class="app-card p-6 flex flex-col justify-between group">
-                    <div>
-                        <div class="flex justify-between items-start mb-4">
-                            <span class="text-[9px] font-bold px-2 py-1 bg-white/5 text-gray-500 rounded uppercase tracking-widest">${b.kategori}</span>
-                            <span class="text-[10px] font-bold ${b.stokTersedia<=0?'text-red-500':'text-green-500'}">
-                                ${b.stokTersedia<=0?'HABIS':'STOK: '+b.stokTersedia}
-                            </span>
+            const query = document.getElementById('searchBuku').value.toLowerCase();
+            const filtered = daftarBuku.filter(b => b.judul.toLowerCase().includes(query));
+            document.getElementById('bukuGrid').innerHTML = filtered.map(b => `
+                <div class="app-card p-6 border-l-4 border-gold-primary">
+                    <div class="flex justify-between items-start mb-4">
+                        <span class="px-2 py-1 bg-gold-primary/10 text-gold-primary text-[8px] font-black uppercase rounded">${b.kategori}</span>
+                        <div class="flex gap-2">
+                             <button onclick="editBook(${b.id})" class="text-gray-500 hover:text-white"><i class="fas fa-edit"></i></button>
+                             <button onclick="deleteBook(${b.id})" class="text-gray-500 hover:text-red-500"><i class="fas fa-trash"></i></button>
                         </div>
-                        <h5 class="text-sm font-bold text-white mb-1 line-clamp-2">${b.judul}</h5>
-                        <p class="text-[11px] text-gray-500 italic">${b.penulis}</p>
                     </div>
-                    <div class="mt-6 pt-4 border-t border-white/5 flex justify-between">
-                        <button onclick="editBook(${b.id})" class="text-[10px] font-black text-gold-primary uppercase hover:text-white">Ubah</button>
-                        <button onclick="deleteSingleBook(${b.id})" class="text-[10px] font-black text-red-500/50 uppercase hover:text-red-500">Hapus</button>
+                    <h5 class="font-bold text-white mb-1 leading-tight">${b.judul}</h5>
+                    <p class="text-[10px] text-gray-500 mb-4">${b.penulis || 'Anonim'}</p>
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <p class="text-[9px] text-gray-600 uppercase font-bold">Tersedia</p>
+                            <p class="text-xl font-black ${b.stokTersedia > 0 ? 'text-white':'text-red-500'}">${b.stokTersedia} <span class="text-[10px] font-normal text-gray-500">/ ${b.stokAwal}</span></p>
+                        </div>
                     </div>
                 </div>
             `).join('');
-            populatePinjamSelect();
-        }
-
-        function addBook() {
-            const idInput = document.getElementById('editBookId').value;
-            const title = document.getElementById('bookTitle').value;
-            const author = document.getElementById('bookAuthor').value;
-            const stock = parseInt(document.getElementById('bookStock').value);
-            const cat = document.getElementById('bookCategory').value;
-            
-            if(!title || isNaN(stock)) return showAlert("⚠️ Lengkapi data buku!");
-
-            if(idInput) {
-                const b = daftarBuku.find(x => x.id == idInput);
-                const diff = stock - b.stokAwal;
-                b.judul = title; b.penulis = author; b.kategori = cat; b.stokAwal = stock;
-                b.stokTersedia = Math.max(0, b.stokTersedia + diff);
-                cancelEditBook();
-            } else {
-                daftarBuku.unshift({ id: Date.now(), judul: title, penulis: author, kategori: cat, stokAwal: stock, stokTersedia: stock });
-            }
-            localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
-            renderBuku(); refreshStats(); showAlert("✅ Koleksi Berhasil Disimpan!");
-            document.getElementById('bookTitle').value = ''; document.getElementById('bookAuthor').value = '';
-        }
-
-        function editBook(id) {
-            const b = daftarBuku.find(x => x.id == id);
-            switchTab('kelola');
-            document.getElementById('editBookId').value = b.id;
-            document.getElementById('bookTitle').value = b.judul;
-            document.getElementById('bookAuthor').value = b.penulis;
-            document.getElementById('bookStock').value = b.stokAwal;
-            document.getElementById('bookCategory').value = b.kategori;
-            document.getElementById('btnSaveBook').innerText = "Update Buku";
-            document.getElementById('btnCancelEdit').classList.remove('hidden');
-        }
-
-        function cancelEditBook() {
-            document.getElementById('editBookId').value = '';
-            document.getElementById('btnSaveBook').innerText = "Simpan Koleksi";
-            document.getElementById('btnCancelEdit').classList.add('hidden');
-            document.getElementById('bookTitle').value = ''; document.getElementById('bookAuthor').value = '';
-        }
-
-        function deleteSingleBook(id) {
-            showConfirm("Hapus buku ini dari sistem?", () => {
-                daftarBuku = daftarBuku.filter(x => x.id !== id);
-                localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
-                renderBuku(); refreshStats();
-            });
         }
 
         // --- TRANSACTIONS ---
         function populatePinjamSelect() {
-            const s = document.getElementById('pinjamBukuId'); if(!s) return;
-            s.innerHTML = '<option value="">Cari Buku...</option>' + 
+            const sel = document.getElementById('pinjamBukuId');
+            sel.innerHTML = `<option value="">-- Pilih Judul Buku --</option>` + 
                 daftarBuku.filter(b => b.stokTersedia > 0).map(b => `<option value="${b.id}">${b.judul}</option>`).join('');
         }
 
         function updateMaxQty() {
-            const b = daftarBuku.find(x => x.id == document.getElementById('pinjamBukuId').value);
-            document.getElementById('qtyHint').innerText = b ? `Stok Tersedia: ${b.stokTersedia}` : "";
+            const id = document.getElementById('pinjamBukuId').value;
+            const buku = daftarBuku.find(b => b.id == id);
+            document.getElementById('qtyHint').innerText = buku ? `Stok tersedia: ${buku.stokTersedia} eks` : '';
+            if(buku) document.getElementById('pinjamQty').max = buku.stokTersedia;
         }
 
         function prosesPinjam() {
-            const id = document.getElementById('pinjamBukuId').value;
+            const bId = document.getElementById('pinjamBukuId').value;
             const qty = parseInt(document.getElementById('pinjamQty').value);
             const nama = document.getElementById('pinjamNama').value;
-            const dl = document.getElementById('pinjamDeadline').value;
-            
-            if(!id || !nama || !dl || isNaN(qty)) return showAlert("⚠️ Lengkapi data!");
-            const b = daftarBuku.find(x => x.id == id);
-            if(qty > b.stokTersedia) return showAlert("⚠️ Stok tidak mencukupi!");
+            const deadline = document.getElementById('pinjamDeadline').value;
 
-            b.stokTersedia -= qty;
-            listPinjam.push({ id: Date.now(), bukuId: id, judul: b.judul, qty, peminjam: nama, deadline: dl });
+            if(!bId || !nama || !deadline || qty < 1) return showAlert("⚠️ Lengkapi data peminjaman!");
+
+            const buku = daftarBuku.find(b => b.id == bId);
+            if(qty > buku.stokTersedia) return showAlert("⚠️ Stok tidak cukup!");
+
+            buku.stokTersedia -= qty;
+            const entry = { id: Date.now(), bukuId: bId, judul: buku.judul, nama, qty, deadline, tgl: new Date().toLocaleDateString('id-ID') };
+            listPinjam.push(entry);
+            sendToGoogleSheet('Peminjaman_Buku', entry);
+
             localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
             localStorage.setItem('listPinjam', JSON.stringify(listPinjam));
-            renderPeminjaman(); renderBuku(); refreshStats(); showAlert("✅ Pinjam Berhasil!");
+            
+            renderBuku(); renderPeminjaman(); populatePinjamSelect(); refreshStats();
             document.getElementById('pinjamNama').value = '';
+            showAlert("📖 Peminjaman Berhasil!");
         }
 
         function renderPeminjaman() {
-            document.getElementById('peminjamanBody').innerHTML = listPinjam.map((p, i) => `
+            document.getElementById('peminjamanBody').innerHTML = listPinjam.map(p => `
                 <tr>
-                    <td class="py-4 font-bold text-white text-[11px]">${p.peminjam}</td>
-                    <td class="py-4 text-gray-500 text-[10px] line-clamp-1">${p.judul}</td>
-                    <td class="py-4 text-gold-primary font-black text-center text-xs">${p.qty}</td>
-                    <td class="py-4 text-red-400 font-bold text-[10px]">${p.deadline}</td>
+                    <td class="py-4"><p class="text-xs font-bold text-white">${p.nama}</p></td>
+                    <td class="py-4"><p class="text-[10px] text-gray-400">${p.judul}</p></td>
+                    <td class="py-4 text-center"><span class="text-xs font-bold">${p.qty}</span></td>
+                    <td class="py-4"><span class="text-[10px] font-bold text-gold-primary">${p.deadline}</span></td>
                     <td class="py-4 text-right">
-                        <button onclick="kembali(${i})" class="text-[9px] font-bold text-green-500 border border-green-500/20 px-2 py-1 rounded hover:bg-green-500/10">KEMBALI</button>
+                        <button onclick="kembalikanBuku(${p.id})" class="bg-gold-primary/10 text-gold-primary text-[8px] font-bold px-3 py-2 rounded-lg hover:bg-gold-primary hover:text-black transition-all">KEMBALIKAN</button>
                     </td>
                 </tr>
             `).join('');
-            refreshStats();
         }
 
-        function kembali(idx) {
-            const p = listPinjam[idx];
-            const b = daftarBuku.find(x => x.id == p.bukuId);
-            if(b) b.stokTersedia += p.qty;
-            listPinjam.splice(idx, 1);
+        function kembalikanBuku(id) {
+            const p = listPinjam.find(x => x.id == id);
+            const buku = daftarBuku.find(b => b.id == p.bukuId);
+            if(buku) buku.stokTersedia += p.qty;
+            
+            listPinjam = listPinjam.filter(x => x.id != id);
             localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
             localStorage.setItem('listPinjam', JSON.stringify(listPinjam));
-            renderPeminjaman(); renderBuku(); refreshStats();
+            
+            renderBuku(); renderPeminjaman(); populatePinjamSelect(); refreshStats();
+            showAlert("✅ Buku telah dikembalikan");
         }
 
-        // --- GLOBAL DELETE (IMPROVED) ---
-        function clearSiswaHistory() {
-            showConfirm("Bersihkan riwayat kunjungan hari ini?", () => {
-                riwayatSiswa = [];
-                localStorage.setItem('riwayatSiswa', JSON.stringify([]));
-                renderSiswaHistory(); refreshStats();
-                showAlert("✅ Riwayat Berhasil Dihapus!");
-            });
-        }
-
-        function clearPiketLog() {
-            showConfirm("Bersihkan seluruh log presensi petugas?", () => {
-                piketLog = [];
-                localStorage.setItem('piketLog', JSON.stringify([]));
-                renderPiketHistory();
-                showAlert("✅ Log Presensi Dihapus!");
-            });
-        }
-
-        function clearPeminjaman() {
-            showConfirm("Hapus SEMUA data peminjaman? (Buku akan dianggap kembali ke stok)", () => {
-                // Kembalikan semua stok sebelum menghapus
-                listPinjam.forEach(p => {
-                    const b = daftarBuku.find(x => x.id == p.bukuId);
-                    if(b) b.stokTersedia += p.qty;
-                });
-                listPinjam = [];
-                localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
-                localStorage.setItem('listPinjam', JSON.stringify([]));
-                renderPeminjaman(); renderBuku(); refreshStats();
-                showAlert("✅ Data Peminjaman Bersih!");
-            });
-        }
-
-        function clearKatalogBuku() {
-            showConfirm("Format ulang seluruh katalog buku?", () => {
-                daftarBuku = [];
-                listPinjam = []; // Juga hapus pinjam karena referensi buku hilang
-                localStorage.setItem('daftarBuku', JSON.stringify([]));
-                localStorage.setItem('listPinjam', JSON.stringify([]));
-                renderBuku(); renderPeminjaman(); refreshStats();
-                showAlert("✅ Katalog Berhasil Dikosongkan!");
-            });
-        }
-
-        // --- MANAGE PIKET ---
+        // --- MANAGEMENT (SISTEM) ---
         function renderManageList() {
-            document.getElementById('manageList').innerHTML = Object.keys(dataJadwal).map(day => `
-                <div class="p-4 bg-white/5 rounded-2xl border border-white/5">
-                    <h6 class="text-[9px] font-black text-gold-primary uppercase mb-3">${day}</h6>
-                    ${dataJadwal[day].map((n, i) => `
-                        <div class="flex justify-between items-center text-[10px] mb-1">
-                            <span class="text-gray-300">${n}</span>
-                            <button onclick="removeMember('${day}', ${i})" class="text-red-500/30 hover:text-red-500"><i class="fas fa-times"></i></button>
+            let html = "";
+            for(let day in dataJadwal) {
+                html += `<div class="col-span-full mt-4 mb-2 text-[10px] text-gold-primary font-black uppercase tracking-widest border-b border-gold-primary/20 pb-1">${day}</div>`;
+                dataJadwal[day].forEach(name => {
+                    html += `
+                        <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5">
+                            <span class="text-[10px] font-bold">${name}</span>
+                            <button onclick="removeMember('${day}', '${name}')" class="text-red-500 hover:scale-110 transition-transform"><i class="fas fa-times-circle"></i></button>
                         </div>
-                    `).join('')}
-                </div>
-            `).join('');
+                    `;
+                });
+            }
+            document.getElementById('manageList').innerHTML = html;
         }
 
         function addMember() {
@@ -766,56 +744,111 @@
             renderManageList(); renderAttendance();
         }
 
-        function removeMember(d, i) {
-            dataJadwal[d].splice(i, 1);
+        function removeMember(day, name) {
+            dataJadwal[day] = dataJadwal[day].filter(n => n !== name);
             localStorage.setItem('jadwalPerpus', JSON.stringify(dataJadwal));
             renderManageList(); renderAttendance();
         }
 
-        // --- HELPERS ---
+        function editBook(id) {
+            const b = daftarBuku.find(x => x.id == id);
+            document.getElementById('editBookId').value = b.id;
+            document.getElementById('bookTitle').value = b.judul;
+            document.getElementById('bookAuthor').value = b.penulis;
+            document.getElementById('bookCategory').value = b.kategori;
+            document.getElementById('bookStock').value = b.stokAwal;
+            document.getElementById('formBukuTitle').innerText = "Edit Data Buku";
+            document.getElementById('btnSaveBook').innerText = "Update Koleksi";
+            document.getElementById('btnCancelEdit').classList.remove('hidden');
+            switchTab('kelola');
+        }
+
+        function cancelEditBook() {
+            document.getElementById('editBookId').value = '';
+            document.getElementById('formBukuTitle').innerText = "Master Data Buku";
+            document.getElementById('btnSaveBook').innerText = "Simpan Koleksi";
+            document.getElementById('btnCancelEdit').classList.add('hidden');
+            document.querySelectorAll('#section-kelola input').forEach(i => i.value = '');
+        }
+
+        function deleteBook(id) {
+            confirmDelete("Hapus buku ini dari katalog selamanya?", () => {
+                daftarBuku = daftarBuku.filter(b => b.id != id);
+                localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
+                renderBuku(); refreshStats(); populatePinjamSelect();
+            });
+        }
+
+        // --- UTILS ---
         function showAlert(msg) {
             document.getElementById('alertMessage').innerText = msg;
             document.getElementById('customAlert').classList.remove('hidden');
         }
         function closeAlert() { document.getElementById('customAlert').classList.add('hidden'); }
-        function showConfirm(msg, callback) {
+
+        let confirmCallback = null;
+        function confirmDelete(msg, cb) {
             document.getElementById('confirmMessage').innerText = msg;
             document.getElementById('confirmModal').classList.remove('hidden');
-            document.getElementById('confirmBtnAction').onclick = () => { callback(); closeConfirm(); };
+            confirmCallback = cb;
         }
         function closeConfirm() { document.getElementById('confirmModal').classList.add('hidden'); }
+        document.getElementById('confirmBtnAction').onclick = () => {
+            if(confirmCallback) confirmCallback();
+            closeConfirm();
+        };
 
-        // --- PDF EXPORTS ---
+        // --- BULK DELETE ---
+        function clearSiswaHistory() { confirmDelete("Bersihkan semua riwayat kunjungan?", () => { riwayatSiswa = []; localStorage.setItem('riwayatSiswa', '[]'); renderSiswaHistory(); refreshStats(); }); }
+        function clearPiketLog() { confirmDelete("Hapus semua riwayat presensi petugas?", () => { piketLog = []; localStorage.setItem('piketLog', '[]'); renderPiketHistory(); }); }
+        function clearPeminjaman() { confirmDelete("Hapus data peminjaman aktif? (Tidak mengembalikan stok)", () => { listPinjam = []; localStorage.setItem('listPinjam', '[]'); renderPeminjaman(); refreshStats(); }); }
+        function clearKatalogBuku() { confirmDelete("Hapus semua data buku?", () => { daftarBuku = []; localStorage.setItem('daftarBuku', '[]'); renderBuku(); refreshStats(); populatePinjamSelect(); }); }
+
+        // --- PDF DOWNLOADS ---
         function downloadRekapKunjungan() {
-            const { jsPDF } = window.jspdf; const doc = new jsPDF();
-            doc.text("LAPORAN KUNJUNGAN PERPUSTAKAAN", 10, 10);
-            doc.autoTable({ head:[['Waktu','Nama','Kelas','Tujuan']], body:riwayatSiswa.map(s=>[s.w,s.n,s.k,s.t]) });
-            doc.save("Laporan_Kunjungan.pdf");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("LAPORAN KUNJUNGAN PERPUSTAKAAN - SMPN 4 MONTA", 14, 20);
+            const body = riwayatSiswa.map(s => [s.w, s.n, s.k, s.t]);
+            doc.autoTable({ head: [['Waktu', 'Nama Siswa', 'Kelas', 'Tujuan']], body,startY: 30 });
+            doc.save(`Kunjungan_${new Date().toLocaleDateString()}.pdf`);
         }
+
         function downloadRekapPiket() {
-            const { jsPDF } = window.jspdf; const doc = new jsPDF();
-            doc.text("LAPORAN PRESENSI PETUGAS", 10, 10);
-            doc.autoTable({ head:[['Tgl','Nama','Status']], body:piketLog.map(l=>[l.tgl,l.nama,l.status]) });
-            doc.save("Laporan_Piket.pdf");
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("LAPORAN PRESENSI PETUGAS PIKET", 14, 20);
+            const body = piketLog.map(l => [l.tgl, l.hari, l.nama, l.status]);
+            doc.autoTable({ head: [['Tanggal', 'Hari', 'Nama Petugas', 'Status']], body, startY: 30 });
+            doc.save(`Presensi_Petugas_${new Date().toLocaleDateString()}.pdf`);
         }
+
+        function downloadMasterJadwal() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.setFontSize(16);
+            doc.text("JADWAL PIKET PERPUSTAKAAN SMPN 4 MONTA", 105, 20, { align: 'center' });
+            let y = 35;
+            for(let day in dataJadwal) {
+                doc.setFont(undefined, 'bold');
+                doc.text(day, 14, y);
+                y += 7;
+                doc.setFont(undefined, 'normal');
+                dataJadwal[day].forEach(n => { doc.text("- " + n, 20, y); y += 6; });
+                y += 5;
+                if(y > 270) { doc.addPage(); y = 20; }
+            }
+            doc.save("Jadwal_Piket_Perpus.pdf");
+        }
+
         function downloadRekapKatalog() {
-            const { jsPDF } = window.jspdf; const doc = new jsPDF();
-            doc.text("DAFTAR KATALOG KOLEKSI BUKU", 10, 10);
-            doc.autoTable({ head:[['Judul','Penulis','Kategori','Stok']], body:daftarBuku.map(b=>[b.judul,b.penulis,b.kategori,b.stokTersedia]) });
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            doc.text("KATALOG KOLEKSI BUKU PERPUSTAKAAN", 14, 20);
+            const body = daftarBuku.map(b => [b.judul, b.penulis, b.kategori, b.stokAwal, b.stokTersedia]);
+            doc.autoTable({ head: [['Judul', 'Penulis', 'Kategori', 'Total', 'Sisa']], body, startY: 30 });
             doc.save("Katalog_Buku.pdf");
         }
-        function downloadMasterJadwal() {
-            const { jsPDF } = window.jspdf; const doc = new jsPDF();
-            doc.text("JADWAL PIKET PETUGAS PERPUSTAKAAN", 10, 10);
-            let rows = [];
-            ["Senin","Selasa","Rabu","Kamis","Jum'at","Sabtu"].forEach(d => {
-                dataJadwal[d].forEach(n => rows.push([d, n]));
-            });
-            doc.autoTable({ head:[['Hari','Nama Petugas']], body:rows });
-            doc.save("Master_Jadwal.pdf");
-        }
-
-        window.onload = init;
     </script>
 </body>
 </html>
