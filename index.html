@@ -94,6 +94,18 @@
             .sidebar { transform: translateX(-100%); position: fixed; z-index: 50; height: 100vh; }
             .sidebar.open { transform: translateX(0); }
         }
+
+        /* --- STYLES UNTUK CHAT AI --- */
+        .chat-bubble-user {
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.15) 0%, rgba(212, 175, 55, 0.05) 100%);
+            border: 1px solid rgba(212, 175, 55, 0.3);
+            border-bottom-right-radius: 4px;
+        }
+        .chat-bubble-ai {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom-left-radius: 4px;
+        }
     </style>
 </head>
 <body class="flex min-h-screen" onload="init()">
@@ -223,6 +235,64 @@
                     </button>
                 </div>
             </div>
+
+            <!-- ================= START AI ASSISTANT SECTION ================= -->
+            <div class="grid grid-cols-1 gap-8">
+                <div class="app-card p-8 flex flex-col">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl gold-gradient flex items-center justify-center text-black text-lg shadow-lg shadow-gold-dark/30">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-lg font-bold text-white flex items-center gap-2">
+                                    AI Assistant Perpus
+                                </h4>
+                                <p class="text-[11px] text-gray-500">Asisten cerdas untuk analisis buku, statistik, dan rekomendasi.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Sumber:</label>
+                            <select id="aiModeSelect" class="p-2 rounded-xl text-xs font-bold border-gold-primary/20 bg-black/40 text-white outline-none">
+                                <option value="gemini" selected>Gemini Cloud (Otomatis & Stabil)</option>
+                                <option value="ollama">Ollama Local (gemma2:2b)</option>
+                            </select>
+                            <button onclick="clearAIChat()" class="text-[9px] font-bold uppercase text-gray-400 hover:text-white border border-white/10 px-3 py-2 rounded-xl transition-all">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Area Chat -->
+                    <div id="aiChatArea" class="space-y-4 max-h-[400px] overflow-y-auto pr-2 mb-6 min-h-[150px] flex flex-col">
+                        <!-- Pesan Pembuka Default -->
+                        <div class="chat-bubble-ai max-w-[85%] self-start p-4 rounded-2xl text-xs text-gray-300 leading-relaxed">
+                            <p class="font-bold gold-text mb-1"><i class="fas fa-crown mr-1"></i> Asisten Perpustakaan</p>
+                            Halo! Saya Asisten AI Perpustakaan SMP Negeri 4 Monta. Saya terintegrasi dengan data katalog, buku tamu, dan riwayat peminjaman perpustakaan secara langsung. 
+                            <br><br>Ada yang bisa saya bantu? Coba tanyakan:
+                            <ul class="list-disc pl-4 mt-2 space-y-1 text-gray-400">
+                                <li>"Bagaimana ketersediaan stok buku saat ini?"</li>
+                                <li>"Siapa saja siswa yang berkunjung hari ini?"</li>
+                                <li>"Berikan rekomendasi buku pelajaran atau fiksi yang ada!"</li>
+                                <li>"Apakah ada buku yang belum dikembalikan?"</li>
+                            </ul>
+                            <span class="text-[9px] text-gray-600 block mt-2 text-right">Sistem AI aktif • Gemini Cloud Default</span>
+                        </div>
+                    </div>
+
+                    <!-- Input Pertanyaan -->
+                    <div class="flex gap-3">
+                        <input type="text" id="aiInput" placeholder="Tulis pertanyaan Anda tentang perpustakaan..." 
+                               class="flex-1 p-4 rounded-xl text-xs bg-black/40 border border-white/10 focus:border-gold-primary focus:ring-1 focus:ring-gold-primary text-white outline-none"
+                               onkeydown="if(event.key === 'Enter') sendToAI()">
+                        <button onclick="sendToAI()" id="btnSendAI" class="gold-gradient px-6 rounded-xl text-black text-xs font-black uppercase tracking-wider hover:scale-[1.02] transition-transform flex items-center gap-2">
+                            <span>KIRIM</span>
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- ================= END AI ASSISTANT SECTION ================= -->
         </div>
 
         <!-- PIKET TAB -->
@@ -487,6 +557,222 @@
             const opt = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
             document.getElementById('currentDate').innerText = now.toLocaleDateString('id-ID', opt);
             document.getElementById('currentTime').innerText = now.toLocaleTimeString('id-ID');
+        }
+
+        // --- AI ASSISTANT FUNCTIONS (DUAL MODE: GEMINI CLOUD & OLLAMA LOCAL) ---
+        async function sendToAI() {
+            const aiInput = document.getElementById('aiInput');
+            const userQuestion = aiInput.value.trim();
+            if (!userQuestion) return;
+
+            const mode = document.getElementById('aiModeSelect').value;
+
+            // Render pertanyaan user ke chatbox
+            appendChatMessage(userQuestion, 'user');
+            aiInput.value = '';
+
+            // Tampilkan Loader
+            const loaderId = appendChatLoader(mode);
+
+            // Bersihkan data untuk pengiriman prompt
+            const cleanDaftarBuku = daftarBuku.map(b => ({
+                judul: b.judul,
+                penulis: b.penulis,
+                kategori: b.kategori,
+                tersedia: b.stokTersedia,
+                total: b.stokAwal
+            })).slice(0, 30);
+
+            const cleanListPinjam = listPinjam.map(p => ({
+                nama: p.nama,
+                judul: p.judul,
+                qty: p.qty,
+                kembali_sebelum: p.deadline,
+                status: p.ket
+            })).slice(0, 15);
+
+            const cleanRiwayatSiswa = riwayatSiswa.map(r => ({
+                nama: r.n,
+                kelas: r.k,
+                tujuan: r.t,
+                jam: r.w
+            })).slice(0, 15);
+
+            const systemPrompt = `
+[SISTEM PERPUSTAKAAN SMP NEGERI 4 MONTA]
+Anda adalah Gemma AI / Gemini, asisten virtual cerdas di perpustakaan SMP Negeri 4 Monta, NTB, Indonesia.
+Tugas Anda: Membantu pengelola dan siswa menganalisis data koleksi, kunjungan, serta transaksi peminjaman secara akurat berdasarkan data nyata yang disediakan di bawah ini.
+
+DATA REAL-TIME SAAT INI:
+- Total Buku Terdaftar: ${daftarBuku.length}
+- Total Transaksi Peminjaman: ${listPinjam.length}
+- Total Kunjungan Siswa: ${riwayatSiswa.length}
+
+DETAIL BUKU:
+${JSON.stringify(cleanDaftarBuku)}
+
+DETAIL PEMINJAMAN AKTIF:
+${JSON.stringify(cleanListPinjam)}
+
+DETAIL PENGUNJUNG HARI INI:
+${JSON.stringify(cleanRiwayatSiswa)}
+
+ATURAN MENJAWAB:
+1. Selalu jawab dengan bahasa Indonesia yang ramah, sopan, mendidik, dan bernuansa premium/profesional.
+2. Jika ditanya mengenai stok buku, sisa buku, atau status peminjaman, rujuk ke DATA REAL-TIME di atas.
+3. Berikan rekomendasi buku dari daftar buku yang kami miliki jika diminta.
+4. Jawab secara padat, informatif, dan gunakan format list jika mempermudah pembacaan.
+`;
+
+            if (mode === 'gemini') {
+                // --- GEMINI CLOUD (PRO-LEVEL FALLBACK & ONLINE WORKFLOW) ---
+                try {
+                    const resultText = await fetchGeminiWithRetry(userQuestion, systemPrompt);
+                    removeChatLoader(loaderId);
+                    appendChatMessage(resultText, 'ai', 'Gemini Cloud');
+                } catch (err) {
+                    removeChatLoader(loaderId);
+                    appendChatMessage(`⚠️ Gagal tersambung ke Gemini Cloud API. Hubungkan koneksi internet Anda atau beralih ke Ollama.`, 'ai', 'Sistem');
+                }
+            } else {
+                // --- OLLAMA LOCAL WORKFLOW ---
+                const combinedPrompt = `${systemPrompt}\n\nPertanyaan Pengguna:\n"${userQuestion}"`;
+                try {
+                    const response = await fetch("http://localhost:11434/api/generate", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            model: "gemma2:2b",
+                            prompt: combinedPrompt,
+                            stream: false
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error("Local server offline");
+                    }
+
+                    const data = await response.json();
+                    removeChatLoader(loaderId);
+                    appendChatMessage(data.response, 'ai', 'Gemma Local');
+                } catch (err) {
+                    removeChatLoader(loaderId);
+                    appendChatMessage(`⚠️ **Gagal terhubung ke Ollama Local Server.**\n\n**Cara mengatasinya:**\n1. Pastikan aplikasi Ollama di PC Anda sudah berjalan.\n2. Buka terminal/CMD lalu ketik: \`ollama run gemma2:2b\`.\n3. Jika masalah CORS terjadi di browser, tutup Ollama lalu jalankan ulang lewat terminal dengan perintah:\n   - **Windows (CMD):** \`set OLLAMA_ORIGINS=* && ollama serve\`\n   - **Mac/Linux:** \`OLLAMA_ORIGINS="*" ollama serve\`\n4. Atau cukup alihkan pilihan sumber di atas ke **Gemini Cloud** yang selalu aktif secara otomatis.`, 'ai', 'Sistem');
+                }
+            }
+        }
+
+        // Integrasi Gemini API Resmi dengan Aturan Eksponensial Backoff (Maksimal 5x Percobaan)
+        async function fetchGeminiWithRetry(userQuery, sysPrompt) {
+            const apiKey = ""; // Disuntikkan otomatis oleh platform saat runtime
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: { parts: [{ text: sysPrompt }] }
+            };
+
+            let delay = 1000;
+            for (let i = 0; i < 5; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    if (response.ok) {
+                        const result = await response.json();
+                        return result.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, tidak ada respons yang dihasilkan.";
+                    }
+                } catch (err) {
+                    // Retry secara senyap tanpa mencemari log konsol sesuai aturan guardrail
+                }
+                await new Promise(resolve => setTimeout(resolve, delay));
+                delay *= 2; // Eksponensial: 1s, 2s, 4s, 8s, 16s
+            }
+            throw new Error("Gemini Cloud API mengalami kendala koneksi.");
+        }
+
+        function appendChatMessage(text, sender, labelName = "") {
+            const chatArea = document.getElementById('aiChatArea');
+            const timeStr = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+
+            const bubble = document.createElement('div');
+            bubble.className = sender === 'user' 
+                ? 'chat-bubble-user max-w-[85%] self-end p-4 rounded-2xl text-xs text-white leading-relaxed shadow-sm' 
+                : 'chat-bubble-ai max-w-[85%] self-start p-4 rounded-2xl text-xs text-gray-300 leading-relaxed shadow-sm';
+
+            if (sender === 'user') {
+                bubble.innerHTML = `
+                    <p class="font-bold text-gold-light mb-1"><i class="fas fa-user-circle mr-1"></i> Anda</p>
+                    <p class="whitespace-pre-line">${escapeHTML(text)}</p>
+                    <span class="text-[8px] text-gray-500 block mt-2 text-right">${timeStr}</span>
+                `;
+            } else {
+                const cleanHTML = formatAIResponse(text);
+                bubble.innerHTML = `
+                    <p class="font-bold gold-text mb-1"><i class="fas fa-robot mr-1"></i> ${labelName || 'Asisten AI'}</p>
+                    <div class="space-y-1">${cleanHTML}</div>
+                    <span class="text-[8px] text-gray-600 block mt-2 text-right">${timeStr}</span>
+                `;
+            }
+
+            chatArea.appendChild(bubble);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function appendChatLoader(mode) {
+            const chatArea = document.getElementById('aiChatArea');
+            const loaderId = 'loader-' + Date.now();
+            const sourceText = mode === 'gemini' ? 'Gemini Cloud' : 'Ollama Local (Gemma)';
+            
+            const loader = document.createElement('div');
+            loader.id = loaderId;
+            loader.className = 'chat-bubble-ai max-w-[85%] self-start p-4 rounded-2xl text-xs text-gray-400 self-start flex items-center gap-2';
+            loader.innerHTML = `
+                <i class="fas fa-spinner animate-spin text-gold-primary"></i>
+                <span>Asisten (${sourceText}) sedang menganalisis data perpustakaan...</span>
+            `;
+            chatArea.appendChild(loader);
+            chatArea.scrollTop = chatArea.scrollHeight;
+            return loaderId;
+        }
+
+        function removeChatLoader(id) {
+            const loader = document.getElementById(id);
+            if (loader) loader.remove();
+        }
+
+        function clearAIChat() {
+            const chatArea = document.getElementById('aiChatArea');
+            chatArea.innerHTML = `
+                <div class="chat-bubble-ai max-w-[85%] self-start p-4 rounded-2xl text-xs text-gray-300 leading-relaxed">
+                    <p class="font-bold gold-text mb-1"><i class="fas fa-crown mr-1"></i> Asisten Perpustakaan</p>
+                    Semua percakapan sebelumnya telah dibersihkan. Silakan ajukan pertanyaan baru Anda!
+                    <span class="text-[9px] text-gray-600 block mt-2 text-right">Sistem AI Siap</span>
+                </div>
+            `;
+        }
+
+        function escapeHTML(str) {
+            return str.replace(/[&<>'"]/g, 
+                tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+            );
+        }
+
+        function formatAIResponse(text) {
+            let formatted = escapeHTML(text);
+            
+            // Format Bold (**teks**)
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Format List Item (- atau * di awal baris)
+            formatted = formatted.replace(/^\s*[-*]\s+(.*?)$/gm, '<li class="list-disc ml-4 my-1">$1</li>');
+            
+            // Baris Baru
+            formatted = formatted.replace(/\n/g, '<br>');
+
+            return formatted;
         }
 
         function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
@@ -792,6 +1078,7 @@
             renderManageList(); renderAttendance();
         }
 
+        // --- UTILS ---
         function editBook(id) {
             const b = daftarBuku.find(x => x.id == id);
             document.getElementById('editBookId').value = b.id;
@@ -821,7 +1108,6 @@
             });
         }
 
-        // --- UTILS ---
         function showAlert(msg) {
             document.getElementById('alertMessage').innerText = msg;
             document.getElementById('customAlert').classList.remove('hidden');
