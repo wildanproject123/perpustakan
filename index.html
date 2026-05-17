@@ -239,7 +239,7 @@
             <!-- ================= START AI ASSISTANT SECTION ================= -->
             <div class="grid grid-cols-1 gap-8">
                 <div class="app-card p-8 flex flex-col">
-                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
+                    <div class="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 border-b border-white/5 pb-4">
                         <div class="flex items-center gap-3">
                             <div class="w-10 h-10 rounded-xl gold-gradient flex items-center justify-center text-black text-lg shadow-lg shadow-gold-dark/30">
                                 <i class="fas fa-robot"></i>
@@ -251,13 +251,20 @@
                                 <p class="text-[11px] text-gray-500">Asisten cerdas untuk analisis buku, statistik, dan rekomendasi.</p>
                             </div>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <label class="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Sumber:</label>
-                            <select id="aiModeSelect" class="p-2 rounded-xl text-xs font-bold border-gold-primary/20 bg-black/40 text-white outline-none">
-                                <option value="gemini" selected>Gemini Cloud (Otomatis & Stabil)</option>
-                                <option value="ollama">Ollama Local (gemma2:2b)</option>
-                            </select>
-                            <button onclick="clearAIChat()" class="text-[9px] font-bold uppercase text-gray-400 hover:text-white border border-white/10 px-3 py-2 rounded-xl transition-all">
+                        
+                        <!-- Panel Pengaturan Model & Key di GitHub -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <div class="flex items-center gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5">
+                                <select id="aiModeSelect" onchange="toggleKeyInputVisibility()" class="p-2 rounded-lg text-xs font-bold bg-transparent border-none text-white outline-none">
+                                    <option value="gemini" selected>Gemini Cloud</option>
+                                    <option value="ollama">Ollama Local (Gemma)</option>
+                                </select>
+                            </div>
+                            <div id="apiKeyContainer" class="flex items-center gap-1 bg-black/40 p-1.5 rounded-xl border border-white/5">
+                                <input type="password" id="customApiKeyInput" placeholder="Masukkan Gemini API Key..." class="p-2 rounded-lg text-xs bg-transparent border-none text-white w-40 outline-none" onchange="saveCustomApiKey()">
+                                <a href="https://aistudio.google.com/" target="_blank" title="Dapatkan API Key Gratis" class="text-gold-primary hover:text-white text-xs px-2"><i class="fas fa-key"></i></a>
+                            </div>
+                            <button onclick="clearAIChat()" class="text-[9px] font-bold uppercase text-gray-400 hover:text-white border border-white/10 px-3 py-3 rounded-xl transition-all">
                                 <i class="fas fa-trash-alt"></i>
                             </button>
                         </div>
@@ -268,15 +275,20 @@
                         <!-- Pesan Pembuka Default -->
                         <div class="chat-bubble-ai max-w-[85%] self-start p-4 rounded-2xl text-xs text-gray-300 leading-relaxed">
                             <p class="font-bold gold-text mb-1"><i class="fas fa-crown mr-1"></i> Asisten Perpustakaan</p>
-                            Halo! Saya Asisten AI Perpustakaan SMP Negeri 4 Monta. Saya terintegrasi dengan data katalog, buku tamu, dan riwayat peminjaman perpustakaan secara langsung. 
-                            <br><br>Ada yang bisa saya bantu? Coba tanyakan:
+                            Halo! Saya Asisten AI Perpustakaan SMP Negeri 4 Monta yang siap menganalisis data secara langsung.
+                            <br><br>
+                            <div id="setupInstructionAlert" class="p-3 bg-gold-primary/10 border border-gold-primary/20 rounded-xl mb-3 text-gold-light">
+                                <i class="fas fa-info-circle mr-1"></i> **PENTING UNTUK PENGGUNA GITHUB:**<br>
+                                Agar asisten bisa merespons di GitHub Pages, harap dapatkan **API Key Gemini gratis** dari <a href="https://aistudio.google.com/" target="_blank" class="underline font-bold text-white">Google AI Studio</a> lalu tempelkan pada kolom input kunci (<i class="fas fa-key"></i>) di kanan atas.
+                            </div>
+                            Ada yang bisa saya bantu? Coba tanyakan:
                             <ul class="list-disc pl-4 mt-2 space-y-1 text-gray-400">
                                 <li>"Bagaimana ketersediaan stok buku saat ini?"</li>
                                 <li>"Siapa saja siswa yang berkunjung hari ini?"</li>
                                 <li>"Berikan rekomendasi buku pelajaran atau fiksi yang ada!"</li>
                                 <li>"Apakah ada buku yang belum dikembalikan?"</li>
                             </ul>
-                            <span class="text-[9px] text-gray-600 block mt-2 text-right">Sistem AI aktif • Gemini Cloud Default</span>
+                            <span class="text-[9px] text-gray-600 block mt-2 text-right">Sistem AI aktif • GitHub Pages Optimized</span>
                         </div>
                     </div>
 
@@ -550,6 +562,14 @@
             renderPeminjaman();
             renderManageList();
             populatePinjamSelect();
+            
+            // Memuat kunci API kustom yang tersimpan di browser pengguna
+            const savedKey = localStorage.getItem('custom_gemini_api_key');
+            if (savedKey) {
+                document.getElementById('customApiKeyInput').value = savedKey;
+                document.getElementById('setupInstructionAlert').classList.add('hidden');
+            }
+            toggleKeyInputVisibility();
         }
 
         function updateTime() {
@@ -559,7 +579,30 @@
             document.getElementById('currentTime').innerText = now.toLocaleTimeString('id-ID');
         }
 
-        // --- AI ASSISTANT FUNCTIONS (DUAL MODE: GEMINI CLOUD & OLLAMA LOCAL) ---
+        // --- SISTEM PENYIMPANAN API KEY KUSTOM UNTUK GITHUB ---
+        function saveCustomApiKey() {
+            const keyVal = document.getElementById('customApiKeyInput').value.trim();
+            if (keyVal) {
+                localStorage.setItem('custom_gemini_api_key', keyVal);
+                document.getElementById('setupInstructionAlert').classList.add('hidden');
+                showAlert("✅ API Key berhasil disimpan secara lokal!");
+            } else {
+                localStorage.removeItem('custom_gemini_api_key');
+                document.getElementById('setupInstructionAlert').classList.remove('hidden');
+            }
+        }
+
+        function toggleKeyInputVisibility() {
+            const mode = document.getElementById('aiModeSelect').value;
+            const container = document.getElementById('apiKeyContainer');
+            if (mode === 'gemini') {
+                container.classList.remove('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        // --- AI ASSISTANT FUNCTIONS (OPTIMAL DI GITHUB & LOKAL) ---
         async function sendToAI() {
             const aiInput = document.getElementById('aiInput');
             const userQuestion = aiInput.value.trim();
@@ -567,14 +610,14 @@
 
             const mode = document.getElementById('aiModeSelect').value;
 
-            // Render pertanyaan user ke chatbox
+            // Tampilkan pertanyaan user di layar
             appendChatMessage(userQuestion, 'user');
             aiInput.value = '';
 
-            // Tampilkan Loader
+            // Tampilkan animasi Loading
             const loaderId = appendChatLoader(mode);
 
-            // Bersihkan data untuk pengiriman prompt
+            // Bersihkan format data agar prompt optimal & hemat token
             const cleanDaftarBuku = daftarBuku.map(b => ({
                 judul: b.judul,
                 penulis: b.penulis,
@@ -600,7 +643,7 @@
 
             const systemPrompt = `
 [SISTEM PERPUSTAKAAN SMP NEGERI 4 MONTA]
-Anda adalah Gemma AI / Gemini, asisten virtual cerdas di perpustakaan SMP Negeri 4 Monta, NTB, Indonesia.
+Anda adalah asisten virtual cerdas di perpustakaan SMP Negeri 4 Monta, NTB, Indonesia.
 Tugas Anda: Membantu pengelola dan siswa menganalisis data koleksi, kunjungan, serta transaksi peminjaman secara akurat berdasarkan data nyata yang disediakan di bawah ini.
 
 DATA REAL-TIME SAAT INI:
@@ -618,24 +661,23 @@ DETAIL PENGUNJUNG HARI INI:
 ${JSON.stringify(cleanRiwayatSiswa)}
 
 ATURAN MENJAWAB:
-1. Selalu jawab dengan bahasa Indonesia yang ramah, sopan, mendidik, dan bernuansa premium/profesional.
+1. Selalu jawab dengan bahasa Indonesia yang ramah, sopan, mendidik, dan profesional.
 2. Jika ditanya mengenai stok buku, sisa buku, atau status peminjaman, rujuk ke DATA REAL-TIME di atas.
 3. Berikan rekomendasi buku dari daftar buku yang kami miliki jika diminta.
 4. Jawab secara padat, informatif, dan gunakan format list jika mempermudah pembacaan.
 `;
 
             if (mode === 'gemini') {
-                // --- GEMINI CLOUD (PRO-LEVEL FALLBACK & ONLINE WORKFLOW) ---
                 try {
                     const resultText = await fetchGeminiWithRetry(userQuestion, systemPrompt);
                     removeChatLoader(loaderId);
                     appendChatMessage(resultText, 'ai', 'Gemini Cloud');
                 } catch (err) {
                     removeChatLoader(loaderId);
-                    appendChatMessage(`⚠️ Gagal tersambung ke Gemini Cloud API. Hubungkan koneksi internet Anda atau beralih ke Ollama.`, 'ai', 'Sistem');
+                    appendChatMessage(`⚠️ **Gagal memproses dengan Gemini Cloud.**\n\n**Kemungkinan penyebab:**\n1. Kunci API Key Gemini belum dimasukkan pada kolom input di kanan atas.\n2. API Key yang Anda masukkan salah atau sudah tidak aktif.\n3. Koneksi internet Anda sedang terganggu.\n\n*Silakan dapatkan API Key secara gratis di [Google AI Studio](https://aistudio.google.com/) lalu tempelkan di kolom bertanda kunci (<i class="fas fa-key"></i>).*`, 'ai', 'Sistem');
                 }
             } else {
-                // --- OLLAMA LOCAL WORKFLOW ---
+                // --- KONEKSI OLLAMA LOCAL ---
                 const combinedPrompt = `${systemPrompt}\n\nPertanyaan Pengguna:\n"${userQuestion}"`;
                 try {
                     const response = await fetch("http://localhost:11434/api/generate", {
@@ -657,15 +699,27 @@ ATURAN MENJAWAB:
                     appendChatMessage(data.response, 'ai', 'Gemma Local');
                 } catch (err) {
                     removeChatLoader(loaderId);
-                    appendChatMessage(`⚠️ **Gagal terhubung ke Ollama Local Server.**\n\n**Cara mengatasinya:**\n1. Pastikan aplikasi Ollama di PC Anda sudah berjalan.\n2. Buka terminal/CMD lalu ketik: \`ollama run gemma2:2b\`.\n3. Jika masalah CORS terjadi di browser, tutup Ollama lalu jalankan ulang lewat terminal dengan perintah:\n   - **Windows (CMD):** \`set OLLAMA_ORIGINS=* && ollama serve\`\n   - **Mac/Linux:** \`OLLAMA_ORIGINS="*" ollama serve\`\n4. Atau cukup alihkan pilihan sumber di atas ke **Gemini Cloud** yang selalu aktif secara otomatis.`, 'ai', 'Sistem');
+                    appendChatMessage(`⚠️ **Gagal terhubung ke Ollama Local Server.**\n\n**Cara mengatasinya jika dibuka via GitHub Pages:**\n1. Karena GitHub Pages menggunakan protokol aman \`https://\`, beberapa browser secara otomatis memblokir request ke server lokal \`http://localhost\`. Anda disarankan untuk beralih ke sumber **Gemini Cloud** di atas untuk kestabilan penuh.\n2. Jika ingin tetap menggunakan Ollama secara lokal, jalankan ulang Ollama Anda di terminal/CMD dengan perintah pengaktif CORS:\n   - **Windows:** \`set OLLAMA_ORIGINS=* && ollama serve\`\n   - **Mac/Linux:** \`OLLAMA_ORIGINS="*" ollama serve\``, 'ai', 'Sistem');
                 }
             }
         }
 
-        // Integrasi Gemini API Resmi dengan Aturan Eksponensial Backoff (Maksimal 5x Percobaan)
+        // Panggilan Gemini API dengan Penanganan Kunci Kustom & Eksponensial Backoff
         async function fetchGeminiWithRetry(userQuery, sysPrompt) {
-            const apiKey = ""; // Disuntikkan otomatis oleh platform saat runtime
-            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+            // Ambil kunci API kustom yang dimasukkan pengguna lewat UI terlebih dahulu
+            let activeApiKey = document.getElementById('customApiKeyInput').value.trim();
+            
+            // Jika kosong, pakai fallback otomatis dari lingkungan sandbox (jika tersedia)
+            if (!activeApiKey) {
+                const autoPlatformKey = "";
+                activeApiKey = autoPlatformKey;
+            }
+
+            if (!activeApiKey) {
+                throw new Error("Kunci API tidak ditemukan");
+            }
+
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${activeApiKey}`;
             
             const payload = {
                 contents: [{ parts: [{ text: userQuery }] }],
@@ -673,7 +727,7 @@ ATURAN MENJAWAB:
             };
 
             let delay = 1000;
-            for (let i = 0; i < 5; i++) {
+            for (let i = 0; i < 3; i++) { // Percobaan dioptimalkan menjadi 3 kali untuk respons cepat di web produksi
                 try {
                     const response = await fetch(url, {
                         method: "POST",
@@ -682,15 +736,15 @@ ATURAN MENJAWAB:
                     });
                     if (response.ok) {
                         const result = await response.json();
-                        return result.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, tidak ada respons yang dihasilkan.";
+                        return result.candidates?.[0]?.content?.parts?.[0]?.text || "Tidak ada respons dari model.";
                     }
                 } catch (err) {
-                    // Retry secara senyap tanpa mencemari log konsol sesuai aturan guardrail
+                    // Percobaan ulang secara berkala tanpa membebani thread utama
                 }
                 await new Promise(resolve => setTimeout(resolve, delay));
-                delay *= 2; // Eksponensial: 1s, 2s, 4s, 8s, 16s
+                delay *= 2;
             }
-            throw new Error("Gemini Cloud API mengalami kendala koneksi.");
+            throw new Error("Layanan Gemini API Cloud tidak merespons.");
         }
 
         function appendChatMessage(text, sender, labelName = "") {
@@ -1078,7 +1132,6 @@ ATURAN MENJAWAB:
             renderManageList(); renderAttendance();
         }
 
-        // --- UTILS ---
         function editBook(id) {
             const b = daftarBuku.find(x => x.id == id);
             document.getElementById('editBookId').value = b.id;
@@ -1108,6 +1161,7 @@ ATURAN MENJAWAB:
             });
         }
 
+        // --- UTILS ---
         function showAlert(msg) {
             document.getElementById('alertMessage').innerText = msg;
             document.getElementById('customAlert').classList.remove('hidden');
