@@ -108,7 +108,6 @@
         }
     </style>
 
-    <!-- KODE DETEKSI LOGO DI LETAKKAN DI HEAD AGAR TIDAK MENGHASILKAN REFERENCE ERROR -->
     <script>
         function showSvgLogo(imgElement, position) {
             const isSidebar = position === 'sidebar';
@@ -234,7 +233,13 @@
                 </div>
                 <div>
                     <h2 id="pageTitle" class="text-3xl font-extrabold text-white">SMP NEGERI 4 MONTA</h2>
-                    <p id="pageSubtitle" class="text-gray-500 text-sm mt-1">Pantau statistik dan aktivitas kunjungan perpustakaan.</p>
+                    <div class="flex flex-wrap items-center gap-2 mt-1">
+                        <p id="pageSubtitle" class="text-gray-500 text-sm">Pantau statistik dan aktivitas kunjungan perpustakaan.</p>
+                        <!-- Badge status sinkronisasi -->
+                        <span id="syncBadge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-500/10 text-yellow-500 flex items-center gap-1 transition-all">
+                            <i class="fas fa-sync animate-spin"></i> Menghubungkan Cloud...
+                        </span>
+                    </div>
                 </div>
             </div>
             <div class="text-right">
@@ -597,9 +602,9 @@
     </div>
 
     <script>
-        // --- GOOGLE SHEET INTEGRATION CONFIG ---
         const scriptURL = "https://script.google.com/macros/s/AKfycbw7PL2gsRrIX8Q6FDVNHYblGQZY-9eXi7DsJHIYk5IBG4I3u9dO6FRlf4Y1R8rpMIa1/exec"; 
 
+        // Fungsi kirim data ke Google Sheets (POST)
         async function sendToGoogleSheet(sheetName, data) {
             if (!scriptURL) return;
             try {
@@ -616,7 +621,24 @@
             }
         }
 
-        // --- DATA INITIALIZATION ---
+        // Fungsi baru untuk mengambil data dari Google Sheets (GET)
+        async function fetchFromGoogleSheet(sheetName) {
+            if (!scriptURL) return null;
+            try {
+                // Mencoba memuat dengan parameter parameter anti-cache t=Date.now()
+                const response = await fetch(`${scriptURL}?sheet=${sheetName}&action=read&t=${Date.now()}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (Array.isArray(data)) {
+                        return data;
+                    }
+                }
+            } catch (error) {
+                console.warn(`Gagal mengambil data ${sheetName} dari Cloud. Menggunakan fallback lokal.`, error);
+            }
+            return null;
+        }
+
         let dataJadwal = JSON.parse(localStorage.getItem('jadwalPerpus')) || {
             "Senin": ["AL AINA UL HADIAH, S.Pd", "MUSLIMAH, S.Pd", "NURLAELAH, S.Pd", "NURUL ARIFAH, S.Pd", "ST. ASFA, S.Pd"],
             "Selasa": ["MUKMINAH, S.Pd", "NURHASANAH, S.Pd", "NURRAHMI, S.Pd", "SA'ADIAH, S.Pd", "JUNARI, S.Pd"],
@@ -635,6 +657,8 @@
         function init() {
             updateTime();
             setInterval(updateTime, 1000);
+            
+            // Muat rendering awal super cepat menggunakan cache lokal terlebih dahulu
             refreshStats();
             renderAttendance();
             renderPiketHistory();
@@ -651,6 +675,74 @@
                 document.getElementById('setupInstructionAlert').classList.add('hidden');
             }
             toggleKeyInputVisibility();
+
+            // Mulai menyinkronkan dengan data utama dari Google Sheets secara langsung saat aplikasi dimuat
+            syncWithGoogleSheets();
+        }
+
+        // Fungsi sinkronisasi latar belakang agar data tidak hilang meskipun cache dibersihkan
+        async function syncWithGoogleSheets() {
+            const syncBadge = document.getElementById('syncBadge');
+            if (!syncBadge) return;
+
+            try {
+                let successSyncCount = 0;
+
+                // 1. Sinkronisasi Data Buku
+                const cloudBuku = await fetchFromGoogleSheet('Data_Buku');
+                if (cloudBuku && cloudBuku.length > 0) {
+                    daftarBuku = cloudBuku;
+                    localStorage.setItem('daftarBuku', JSON.stringify(daftarBuku));
+                    successSyncCount++;
+                }
+
+                // 2. Sinkronisasi Kunjungan Siswa
+                const cloudKunjungan = await fetchFromGoogleSheet('Kunjungan_Siswa');
+                if (cloudKunjungan && cloudKunjungan.length > 0) {
+                    riwayatSiswa = cloudKunjungan;
+                    localStorage.setItem('riwayatSiswa', JSON.stringify(riwayatSiswa));
+                    successSyncCount++;
+                }
+
+                // 3. Sinkronisasi Peminjaman Buku
+                const cloudPinjam = await fetchFromGoogleSheet('Peminjaman_Buku');
+                if (cloudPinjam && cloudPinjam.length > 0) {
+                    listPinjam = cloudPinjam;
+                    localStorage.setItem('listPinjam', JSON.stringify(listPinjam));
+                    successSyncCount++;
+                }
+
+                // 4. Sinkronisasi Presensi Petugas
+                const cloudPiket = await fetchFromGoogleSheet('Presensi_Petugas');
+                if (cloudPiket && cloudPiket.length > 0) {
+                    piketLog = cloudPiket;
+                    localStorage.setItem('piketLog', JSON.stringify(piketLog));
+                    successSyncCount++;
+                }
+
+                if (successSyncCount > 0) {
+                    // Update tampilan lencana menjadi hijau menandakan koneksi sinkronisasi berhasil
+                    syncBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-500 flex items-center gap-1 transition-all";
+                    syncBadge.innerHTML = "<i class='fas fa-cloud-arrow-down'></i> Cloud Sinkron";
+
+                    // Render ulang komponen-komponen utama setelah sinkronisasi data cloud
+                    refreshStats();
+                    renderAttendance();
+                    renderPiketHistory();
+                    renderBuku();
+                    renderSiswaHistory();
+                    renderPeminjaman();
+                    populatePinjamSelect();
+                } else {
+                    // Berhasil terhubung tapi sheet masih kosong
+                    syncBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 flex items-center gap-1 transition-all";
+                    syncBadge.innerHTML = "<i class='fas fa-info-circle'></i> Cloud Siap (Kosong)";
+                }
+            } catch (error) {
+                console.error("Gagal melakukan sinkronisasi dengan Google Sheets:", error);
+                syncBadge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-500 flex items-center gap-1 transition-all";
+                syncBadge.innerHTML = "<i class='fas fa-exclamation-triangle'></i> Mode Offline (Cache)";
+            }
         }
 
         function updateTime() {
@@ -1167,7 +1259,7 @@ ATURAN MENJAWAB:
                     body: JSON.stringify(updatePayload)
                 });
 
-                // Update lokal setelah berhasil cloud (no-cors tidak bisa baca response, tapi kita asumnsikan kirim)
+                // Update lokal setelah berhasil cloud (no-cors tidak bisa baca response, tapi kita asumsikan kirim)
                 if(buku) buku.stokTersedia += p.qty;
                 listPinjam[idx].ket = "SUDAH DIKEMBALIKAN";
 
